@@ -1,4 +1,8 @@
-	Protocol Buffers 是一种轻便高效的结构化数据存储格式，可以用于序列化。可用于通讯协议、数据存储等领域的语言无关、平台无关、可扩展的序列化结构数据格式。
+​	
+
+#### 概述
+
+​	Protocol Buffers 是一种轻便高效的结构化数据存储格式，可以用于序列化。可用于通讯协议、数据存储等领域的语言无关、平台无关、可扩展的序列化结构数据格式。
 
 > ```protobuf
 > package lm; 
@@ -9,6 +13,8 @@
 >    optional int32     opt = 3;  //optional field 
 > }
 > ```
+
+#### 数据结构
 
 ​	写好lm.helloworld.proto文件，定义我们程序中需要处理的结构化数据Message。
 
@@ -35,6 +41,8 @@ lm.helloworld.pb.h ， 定义了 C++ 类的头文件
 lm.helloworld.pb.cc ， C++ 类的实现文件
 
 
+
+#### 读取及解析方法
 
 在 Writer 代码中，将要存入磁盘的结构化数据由一个 lm::helloworld 类的对象表示，它提供了一系列的 get/set 函数用来修改和读取结构化数据中的数据成员，或者叫 field。当我们需要将该结构化数据保存到磁盘上时，类 lm::helloworld 已经提供相应的方法来把一个复杂的数据变成一个字节序列，我们可以将这个字节序列写入磁盘。SerializeToOstream 将对象序列化后写入一个 fstream 流。
 
