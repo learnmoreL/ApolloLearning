@@ -1,32 +1,36 @@
 # Apollo高精地图
 
-#### 1、Apollo地图格式对OpenDRIVE都有哪些改动?
+## 1、Apollo地图格式规范 
 
-OpenDRIVE本身设计面向的应用是仿真器，自动驾驶需要更多的信息OpenDRIVE并没有完全提供，所以对OpenDRIVE的标准做了部分改动和扩展。
+### 概述
 
-主要改动和扩展了以下几个方面：
+百度高精地图数据格式采用（XML）文件格式的数据组织方式，是基于国际通用的OpenDrive规范。OpenDRIVE本身设计面向的应用是仿真器，自动驾驶需要更多的信息OpenDRIVE并没有完全提供，所以对OpenDRIVE的标准做了部分改动和扩展，改动和扩展后的规格在实现上更加的简单，同时也兼顾了无人驾驶的应用需求。改动主要体现在以下几个方面：
 
-- 一是地图元素形状的表述方式。以车道边界为例，标准OpenDRIVE采用基于Reference Line的曲线方程和偏移的方式来表达边界形状，而Apollo OpenDrive采用绝对坐标序列的方式描述边界形状；**
+- 一是**地图元素形状的表述方式**。以车道边界为例，标准OpenDRIVE采用基于Reference Line的曲线方程和偏移的方式来表达边界形状，而Apollo OpenDrive采用**绝对坐标序列的方式**描述边界形状；
 
-- 二是元素类型的扩展。例如新增了对于禁停区、人行横道、减速带等元素的独立描述；
+  > #### 坐标序列
+  >
+  > 任何点、线、面实体都可以用某一坐标系中的坐标点x,y 来表示。这里x,y 可以对应于大地坐标经度和纬度，也可以对应于平面坐标系坐标x 和y。
+  >
+  > 对于点，则是一对坐标;对于线，则是一个坐标串; 对于多边形，则是一条或多条线组成的封闭曲线坐标串，坐标必须首尾相同
 
-- 三是扩展了对于元素之间相互关系的描述。比如新增了junction与junction内元素的关联关系等；
+- 二是**元素类型的扩展**。例如新增了对于禁停区、人行横道、减速带等元素的独立描述；
 
-- 除此之外还有一些配合无人驾驶算法的扩展，比如增加了车道中心线到真实道路边界的距离、停止线与红绿灯的关联关系等。改动和扩展后的规格在实现上更加的简单，同时也兼顾了无人驾驶的应用需求。
+- 三是**扩展了对于元素之间相互关系的描述**。比如新增了junction与junction内元素的关联关系等；
 
-#### 2、格式规范
+- 除此之外还有一些配合无人驾驶算法的扩展，比如增加了车道中心线到真实道路边界的距离、停止线与红绿灯的关联关系等。
 
-百度高精地图数据格式采用（XML）文件格式的数据组织方式，是基于国际通用的OpenDrive规范，并根据百度自动驾驶业务需求拓展修改而成，百度高精地图坐标采用WGS84经纬度坐标表示。WGS84为一种大地坐标系。Apollo高精度地图OpenDrive采用绝对坐标序列的方式描述边界形状，依次为基础生成直线或类似直线的对象。
+### 整体架构
 
 Apollo高精地图文件的整体结构如下所示
 
 ![img](apollo高精地图.assets/20180323001.jpg)
 
-
+### 道路元素定义
 
 ![å¨è¿éæå¥å¾çæè¿°](apollo高精地图.assets/20190308214809130.png)
 
-#####  车道
+####  车道
 
 道路的reference line 存储在ID为0的车道中，其他车道只存储当前车道的一个边界。例如，reference line右侧的车道只存储车道的右侧边界。
 
@@ -48,19 +52,19 @@ Apollo高精地图文件的整体结构如下所示
 
 - 车道总数目没有限制。Reference line 自身必须为 Lane 0。
 
-##### 路口区域（Juction）
+#### 路口区域（Juction）
 
 基本的原理比较简单，路口区域用Junction结构表达。在Junction内，incoming Road通过Connecting Roads与out-going道路相连。下图展示了一个比较复杂的路口：
 
 ![img](apollo高精地图.assets/WechatIMG146.jpeg)
 
-#### 3、高精地图在Apollo的存在形式
+## 3、高精地图在Apollo的存在形式
 
 xml格式的地图见modules/map/data/sunnyvale_big_loop/base_map.xml文件。
 
 不管原始数据格式为什么，在Apollo内部的数据地图的格式为proto
 
-##### 如何从XML解析到proto？
+### 如何从XML解析到proto？
 
 主要是由方法opendrive_adapter.cc中的以下方法解析并读取：modules/map/hd_map/opendrive_adapter.cc
 
@@ -73,11 +77,9 @@ OpendriveAdapter::LoadData(const std::string& filename,apollo::hdmap::Map* pb_ma
 2、header
 3、道路
 4、路口
-等节点的获取，具体的方法可以参考。
+等节点的获取，解析成Proto格式地图，就可以为Apollo中的多个模块，或者统一的方法所使用。
 
-解析成Proto格式地图，就可以为Apollo中的多个模块，或者统一的方法所使用。
-
-##### Apollo高精地图的对象定义
+### Apollo高精地图的对象定义
 
 modules/map/proto/map.proto
 
@@ -120,6 +122,8 @@ message Map {
 }
 ```
 
+#### 边界形状
+
 modules/map/proto/map_geometry.proto
 
 Apollo高精度地图OpenDrive采用绝对坐标序列的方式描述边界形状，依次为基础生成直线或类似直线的对象。
@@ -152,7 +156,7 @@ message Curve {
 }
 ```
 
-##### 道路Road
+### 道路Road
 
 ```protobuf
 message BoundaryEdge {
@@ -203,7 +207,7 @@ message Road {
 }
 ```
 
-##### 车道Lane
+### 车道Lane
 
 modules/map/proto/mao_lane.proto
 
@@ -307,7 +311,7 @@ message Lane {
 }
 ```
 
-#####  路口Junction
+###  路口Junction
 
 modules/map/proto/map_junction.proto
 
@@ -322,7 +326,7 @@ message Junction {
 
 
 
-##### 地图结构及差异
+### 地图结构及差异
 
 一段道路的相关自动驾驶地图可以放置在如下结构的目录中：
 
@@ -345,7 +349,7 @@ sunnyvale_big_loop
 └── speed_control.pb.txt
 ```
 
-##### **base_map, routing_map**和**sim_map**之间的差异
+### **base_map, routing_map**和**sim_map**之间的差异
 
 - `base_map`是最完整的地图，包含所有道路和车道几何形状和标识。其他版本的地图均基于`base_map`生成。
 
@@ -363,7 +367,7 @@ dir_name=modules/map/data/demo    # example map directory
 bazel-bin/modules/map/tools/sim_map_generator  --map_dir=${dir_name} --output_dir=${dir_name}
 ```
 
-#### 4、**获取高精地图元素**
+## 4、**获取高精地图元素**
 
 有了原始从xml格式到protobuf的数据之后，就可以访问这些高精地图的元素，Apollo高精地图提供如下的方法获取元素。提供高精地图元素获取的方法实现类：`apollo::hdmap::HDMapImpl`
 
@@ -410,7 +414,7 @@ GetRoadBoundaries (const apollo::common::PointENU &point, double radius, std::ve
 GetForwardNearestSignalsOnLane (const apollo::common::PointENU &point, const double distance, std::vector< SignalInfoConstPtr > *signals) const
 ```
 
- **获取元素实例**
+###  **获取元素实例**
 
 modules/planning/reference_line/reference_line_provider.cc
 
@@ -451,7 +455,7 @@ bool ReferenceLineProvider::GetReferenceLinesFromRelativeMap(
 }
 ```
 
-#### 5、使用其他地图
+## 5、使用其他地图
 
 1. 更改全局 flagfile: ***modules/common/data/global_flagfile.txt*** 这是所有模块的基本flag文件，保持了整体系统的统一。
 
