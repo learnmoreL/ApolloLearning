@@ -315,7 +315,7 @@ message Lane {
 
 modules/map/proto/map_junction.proto
 
-```
+```protobuf
 // An junction is the junction at-grade of two or more roads crossing.
 message Junction {
   optional Id id = 1;
