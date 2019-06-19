@@ -4,6 +4,8 @@
 
 ​	Protocol Buffers 是一种轻便高效的结构化数据存储格式，可以用于序列化。可用于通讯协议、数据存储等领域的语言无关、平台无关、可扩展的序列化结构数据格式。
 
+​	原生的ROS使用的是其自带的Msg格式来定义的通信协议，但是Msg协议有一个明显的缺点，由于使用了MD5校验，使得Msg的后向兼容不好，如果后续的版本稍微改动一点Msg的格式，就会让双方不能通信了，除非双方都修改XXX.msg文件。鉴于此Apollo使用的是Google的Protocol Buffer简称Proto。
+
 > ```protobuf
 > package lm; 
 > message helloworld 

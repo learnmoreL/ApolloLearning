@@ -68,16 +68,63 @@ xml格式的地图见modules/map/data/sunnyvale_big_loop/base_map.xml文件。
 
 主要是由方法opendrive_adapter.cc中的以下方法解析并读取：modules/map/hd_map/opendrive_adapter.cc
 
-```
+```c++
 OpendriveAdapter::LoadData(const std::string& filename,apollo::hdmap::Map* pb_map)
 ```
 
-解析的过程主要分为以下四个过程：
-1、根目录
-2、header
-3、道路
-4、路口
-等节点的获取，解析成Proto格式地图，就可以为Apollo中的多个模块，或者统一的方法所使用。
+用xml_parser解析opendrive格式的地图文件并用proto_organizer封装成protoco格式，就可以为Apollo中的多个模块，或者统一的方法所使用。
+
+opendrive解析主要分为以下四个过程：
+
+```c++
+bool OpendriveAdapter::LoadData(const std::string& filename,
+                                apollo::hdmap::Map* pb_map) {
+  CHECK_NOTNULL(pb_map);
+
+  tinyxml2::XMLDocument document;
+  if (document.LoadFile(filename.c_str()) != tinyxml2::XML_SUCCESS) {
+    AERROR << "fail to load file " << filename;
+    return false;
+  }
+
+  // root node
+  const tinyxml2::XMLElement* root_node = document.RootElement();
+  CHECK(root_node != nullptr);
+  // header
+  PbHeader* map_header = pb_map->mutable_header();
+  Status status = HeaderXmlParser::Parse(*root_node, map_header);
+  if (!status.ok()) {
+    AERROR << "fail to parse opendrive header, " << status.error_message();
+    return false;
+  }
+
+  // roads
+  std::vector<RoadInternal> roads;
+  status = RoadsXmlParser::Parse(*root_node, &roads);
+  if (!status.ok()) {
+    AERROR << "fail to parse opendrive road, " << status.error_message();
+    return false;
+  }
+
+  // junction
+  std::vector<JunctionInternal> junctions;
+  status = JunctionsXmlParser::Parse(*root_node, &junctions);
+  if (!status.ok()) {
+    AERROR << "fail to parse opendrive junction, " << status.error_message();
+    return false;
+  }
+
+  ProtoOrganizer proto_organizer;
+  proto_organizer.GetRoadElements(&roads);
+  proto_organizer.GetJunctionElements(junctions);
+  proto_organizer.GetOverlapElements(roads, junctions);
+  proto_organizer.OutputData(pb_map);
+
+  return true;
+}
+```
+
+
 
 ### Apollo高精地图的对象定义
 
@@ -367,7 +414,13 @@ dir_name=modules/map/data/demo    # example map directory
 bazel-bin/modules/map/tools/sim_map_generator  --map_dir=${dir_name} --output_dir=${dir_name}
 ```
 
-## 4、**获取高精地图元素**
+## 4、HD Map引擎
+
+![](apollo高精地图.assets/20190317213529387.png)
+
+HDMAP引擎是Apollo里面用于从HDMAP里面提取相关元素给下游的一个模块。它的结构框图如上图所示。
+
+HDMAP 引擎可以通过ID去检索一个元素，也可以通过空间位置查找元素，比如**给定一个点和半径，可以把这个范围之内所有的红绿灯都提出来**。
 
 有了原始从xml格式到protobuf的数据之后，就可以访问这些高精地图的元素，Apollo高精地图提供如下的方法获取元素。提供高精地图元素获取的方法实现类：`apollo::hdmap::HDMapImpl`
 
