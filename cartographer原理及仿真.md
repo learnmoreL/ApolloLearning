@@ -189,11 +189,58 @@ xacro是urdf的升级版，后缀名由urdf变成.xacro，而且在模型中需�
 
 在之前URDF模型中有很多尺寸、坐标等常量的使用，但这些常量分布在整个文件中，可读性很差，后期修改也十分困难，xacro提供了一种常量的属性定义方式。
 
+```xml
+ <xacro:property name="M_PI" value="3.1415926"/>
 ```
 
+当需要该常量的时候
+
+```xml
+<origin xyz="0 0 0" rpy="${M_PI/2} 0 0" />
 ```
 
+如果改动机器人模型，只需要修改这些参数即可。
 
+###### 调用数学公式
+
+在“${}”语句中，不仅可以调用常量，还可以使用一些常用的数学运算，包括加减乘除等。
+
+```xml
+<origin xyz="0 ${reflect*wheel_joint_y} ${-wheel_joint_z}" rpy="0 0 0"/>
+```
+
+###### 使用宏定义
+
+xacro文件可以使用宏定义来声明重复使用的代码模块，而且可以包含输入参数，类似编程中的函数概念。例如在mbot底盘上还有两层支撑板，支撑板之间需要八根支撑柱，支撑柱的模型是一样的，只是位置不同。如果用URDF文件描述需要8次，但在xacro中，这种相同的模型就可以通过定义一种宏定义模块的方式来重复使用。
+
+###### xacro文件引用
+
+改进的机器人模型文件详细内容如下
+
+```xml
+<?xml version="1.0"?>
+<robot name="arm" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <xacro:include filename="$(find mbot_description)/urdf/xacro/mbot_base.xacro" />
+
+    <mbot_base/>
+
+</robot>
+```
+
+<robot>标签之间只有两行代码，第一行代码描述该xacro文件中包含的其他xacro文件，类似c语言中的include文件。声明包含关系后，该文件就可以使用被包含文件中的模块了。
+
+第二行代码调用了被包含文件中的宏定义。也就是说模型文件全部是在xacro中使用一个宏来描述的。如果把机器人本体看做一个模块，并且还要与其他模块集成，使用这种方法就不需要修改机器人的模型文件，只需要在上层实现一个拼装模块的顶层文件即可，灵活性更强。比如在机器人中装配camera和激光雷达，只需要修改此xacro文件。
+
+###### 显示优化后的模型
+
+直接在launch中调用xacro文件解析器，自动将xacro文件转化成urdf文件。
+
+```xml
+ <param name="robot_description" command="$(find xacro)/xacro --inorder '$(find mbot_description)/urdf/xacro/gazebo/mbot_with_laser_gazebo.xacro'" /> 
+```
+
+在终端中启动就可以看到优化后的模型。
 
 #### 添加传感器
 
@@ -251,7 +298,28 @@ xacro是urdf的升级版，后缀名由urdf变成.xacro，而且在模型中需�
 
 ###### 添加激光雷达
 
-使用类似的方式可以为机器人添加一个激光雷达模型,这里概述。未来实现机器人仿真，需要想办法控制机器人在虚拟环境中的运动，另外如果仿真中的传感器可以像真实设备一样获取环境中的信息就更好了。
+使用类似的方式可以为机器人添加一个激光雷达模型,这里配置raplidar.xacro。
+
+```xml
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="laser">
+
+	<xacro:macro name="rplidar" params="prefix:=laser">
+		<link name="${prefix}_link">
+			<visual>
+				<origin xyz=" 0 0 0 " rpy="0 0 0" />
+				<geometry>
+					<cylinder length="0.05" radius="0.05"/>
+				</geometry>
+				<material name="black"/>
+			</visual>
+		</link>
+	</xacro:macro>
+
+</robot>
+```
+
+未来实现机器人仿真，需要想办法控制机器人在虚拟环境中的运动，另外如果仿真中的传感器可以像真实设备一样获取环境中的信息就更好了。
 
 ### Gazebo物理仿真
 
@@ -259,13 +327,94 @@ xacro是urdf的升级版，后缀名由urdf变成.xacro，而且在模型中需�
 
 使用xacro设计的机器人urdf模型已经可以描述机器人外观特征和物理特性，虽然已经具备在Gazebo中仿真的基本条件，但是由于没有在模型中加入Gazebo相关的属性，还是无法让模型在Gazebo仿真环境中动起来。为了可以开始仿真，首先我们需要确保每个link的<inertia>元素进行合理的配置，然后需要为每个必要的<link>、<joint>、<robot>设置<gazebo>标签。gazebo标签是urdf模型中描述gazebo仿真时需要的扩展属性。
 
-添加传动装置
+###### 为link添加<gazebo>标签
 
-添加gazebo控制器插件
+针对机器人模型，需要对每一个link添加<gazebo>标签，包含的属性仅有material。material属性的作用与link里面material属性的作用相同，Gazebo无法通过<visual>中的material参数设置外观颜色，所以需要单独设置，否则默认情况下Gazebo中显示的模型全是灰白色。
 
-在gazebo中显示机器人模型
+###### 添加传动装置
 
-控制机器人在gazebo中运动
+我们设计的机器人是一个两轮差速驱动的机器人，通过调节两个轮子的速度比例，完成前进、转向、倒退等动作。所以我们需要在模型中加入驱动机器人运动的动力源，这是仿真必不可少的部分。
+
+为了使用ROS控制器驱动机器人，需要在模型中加入<transmission>元素，将传动装置与joint绑定。
+
+```xml
+<transmission name="${prefix}_wheel_joint_trans">
+            <type>transmission_interface/SimpleTransmission</type>
+            <joint name="${prefix}_wheel_joint" >
+                <hardwareInterface>hardware_interface/VelocityJointInterface</hardwareInterface>
+            </joint>
+            <actuator name="${prefix}_wheel_joint_motor">
+                <hardwareInterface>hardware_interface/VelocityJointInterface</hardwareInterface>
+                <mechanicalReduction>1</mechanicalReduction>
+            </actuator>
+        </transmission>
+```
+
+以上代码中，<joint name ="">定义了将要绑定驱动器的joint，<type>标签声明了所使用的传动装置类型，<hardwareInterface>定义了硬件接口的类型，这里使用的是速度控制接口。
+
+到现在为止，机器人还是一个静态显示的模型，如果要让他动起来，还需要使用gazebo插件。Gazebo插件赋予了URDF模型更加强大的功能，可以帮助模型绑定ROS消息，从而完成传感器的仿真输出以及对电机的控制，让机器人模型更加真实。
+
+###### 添加gazebo控制器插件
+
+Gazebo插件可以根据插件的作用范围应用到URDF模型的<robot>、<link>、<joint>上，需要使用<gazebo>标签作为封装。为<robot>元素添加插件，与其他gazebo元素相同，如果gazebo元素中没有设置reference="x"属性，则默认应用于<robot>标签。为link、joint标签添加插件，并加载差速控制的常见，在此过程中需要配置一些列参数。
+
+###### 在gazebo中显示机器人模型
+
+在launch文件中加载机器人模型，运行gazeb，加载机器人模型，并且启动一些必要节点。
+
+```xml
+<launch>
+
+    <!-- 设置launch文件的参数 -->
+    <arg name="world_name" value="$(find mbot_gazebo)/worlds/cloister.world"/>
+    <arg name="paused" default="false"/>
+    <arg name="use_sim_time" default="true"/>
+    <arg name="gui" default="true"/>
+    <arg name="headless" default="false"/>
+    <arg name="debug" default="false"/>
+
+    <!-- 运行gazebo仿真环境 -->
+    <include file="$(find gazebo_ros)/launch/empty_world.launch">
+        <arg name="world_name" value="$(arg world_name)" />
+        <arg name="debug" value="$(arg debug)" />
+        <arg name="gui" value="$(arg gui)" />
+        <arg name="paused" value="$(arg paused)"/>
+        <arg name="use_sim_time" value="$(arg use_sim_time)"/>
+        <arg name="headless" value="$(arg headless)"/>
+    </include>
+
+    <!-- 加载机器人模型描述参数 -->
+    <param name="robot_description" command="$(find xacro)/xacro --inorder '$(find mbot_description)/urdf/xacro/gazebo/mbot_with_laser_gazebo.xacro'" /> 
+
+    <!-- 运行joint_state_publisher节点，发布机器人的关节状态  -->
+    <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" ></node> 
+
+    <!-- 运行robot_state_publisher节点，发布tf  -->
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher"  output="screen" >
+        <param name="publish_frequency" type="double" value="50.0" />
+    </node>
+
+    <!-- 在gazebo中加载机器人模型-->
+    <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model" respawn="false" output="screen"
+          args="-urdf -model mbot -param robot_description"/> 
+
+</launch>
+```
+
+以上launch文件主要做的两项工作
+
+- 启动机器人的状态发布节点，同时加载带有Gazebo属性的机器人URDF模型。
+- 启动Gazebo,并将机器人模型加载到Gazebo仿真环境中
+
+![1560907538552](cartographer原理及仿真.assets/1560907538552.png)
+
+###### 控制机器人在gazebo中运动
+
+机器人模型已经加入libgazebo_ros_diff_drive.so插件，可以使用查宿控制实现机器人运动。查看当前系统话题列表
+
+![1560907640641](cartographer原理及仿真.assets/1560907640641.png)
+
+可以看到Gazebo仿真中已经开始订阅cmd_vel话题。接下来可以运行键盘控制节点，发布该话题的速度控制消息，机器人就在gazebo中开始运动了。
 
 #### 激光雷达仿真
 
@@ -351,11 +500,9 @@ xacro是urdf的升级版，后缀名由urdf变成.xacro，而且在模型中需�
 
 #### 运行仿真环境
 
-启动仿真环境并加载机器人
+启动仿真环境并加载装配了激光雷达的机器人，查看系统话题列表并确保laser插件已顺利启动
 
-查看当前系统中的话题列表，确保laser插件已经启动成功
-
-使用命令可查看rplidar的激光数据，并在rviz中显示出来。
+使用命令可查看rplidar的激光数据，并在rviz中显示出来。这里不一一概述。
 
 ### SLAM建图
 
@@ -365,9 +512,29 @@ xacro是urdf的升级版，后缀名由urdf变成.xacro，而且在模型中需�
 
 ##### 传感器信息
 
-###### 深度信息
+###### 环境深度信息
 
-​	针对激光雷达，ros在sensor_msgs包中定义了专用的数据结构-LaserScan，用于存储激光信息。Laserscan消息具体的定义如下：
+​	无论是SLAM还是自主导航，获取周围环境深度信息都是至关重要的。针对激光雷达，ros在sensor_msgs包中定义了专用的数据结构-LaserScan，用于存储激光信息。Laserscan消息具体的定义如下：
+
+```
+#
+# 测量的激光扫描角度，逆时针为正
+# 设备坐标帧的0度面向前（沿着X轴方向）
+#
+ 
+Header header
+float32 angle_min        # scan的开始角度 [弧度]
+float32 angle_max        # scan的结束角度 [弧度]
+float32 angle_increment  # 测量的角度间的距离 [弧度]
+float32 time_increment   # 测量间的时间 [秒]
+float32 scan_time        # 扫描间的时间 [秒]
+float32 range_min        # 最小的测量距离 [米]
+float32 range_max        # 最大的测量距离 [米]
+float32[] ranges         # 测量的距离数据 [米] (注意: 值 < range_min 或 > range_max 应当被丢弃)
+float32[] intensities    # 强度数据 [device-specific units]
+```
+
+多线激光发布的是三维PointCloud点运数据，，这里我们是2D建图，仅仅仿真单线激光即可。
 
 ###### 里程计信息
 
@@ -377,6 +544,39 @@ xacro是urdf的升级版，后缀名由urdf变成.xacro，而且在模型中需�
 
 - pose :机器人当前位置坐标，包括机器人的x,y,z三轴位置与方向参数，以及用于校正误差的协方差矩阵。
 - twist:机器人当前的运动状态，包括x,y,z三轴的线速度与角速度，以及用于校正误差的协方差矩阵
+
+```bash
+std_msgs/Header header
+  uint32 seq
+  time stamp
+  string frame_id
+string child_frame_id
+geometry_msgs/PoseWithCovariance pose
+  geometry_msgs/Pose pose
+    geometry_msgs/Point position
+      float64 x
+      float64 y
+      float64 z
+    geometry_msgs/Quaternion orientation
+      float64 x
+      float64 y
+      float64 z
+      float64 w
+  float64[36] covariance
+geometry_msgs/TwistWithCovariance twist
+  geometry_msgs/Twist twist
+    geometry_msgs/Vector3 linear
+      float64 x
+      float64 y
+      float64 z
+    geometry_msgs/Vector3 angular
+      float64 x
+      float64 y
+      float64 z
+  float64[36] covariance
+
+
+```
 
 上述数据结构中，除了数据与位置的关键信息外，还包含用于滤波算法的协方差矩阵。在精度要求不高的机器人系统中可以使用默认的协方差矩阵；而在竞答要求高的系统中，需要先对机器人精确建模，再通过仿真、实验等方法确定该矩阵的具体数值。
 
