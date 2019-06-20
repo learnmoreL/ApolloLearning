@@ -779,21 +779,33 @@ roslaunch mbot_gazebo mbot_laser_nav_gazebo.launch
 rosservice call /finish_trajectory  "map"
 ```
 
-使用激光雷达进行cartographer SLAM建图的最终效果如下，可以看出建图效果还是相当理想
+使用激光雷达进行cartographer SLAM建图的最终效果如下，可以看出建图效果还是相当理想。在仿真环境下机器人自身不会出现打滑现象，并且室内环境简单特征丰富，所以建图效果十分完美。
 
 ![1560868053900](cartographer原理及仿真.assets/1560868053900.png)
 
-但也并非十全十美，在有回环时候，已经出现了一定程度的漂移。
+但仿真也并非十全十美，在有回环时候，已经出现了一定程度的漂移。
 
 ![1560868834902](cartographer原理及仿真.assets/1560868834902.png)
 
+在速度过快的时候，角落里面的箱字会出现位置不正的情况。
+
+![1561016473912](/home/catalina/.config/Typora/typora-user-images/1561016473912.png)
+
+在我们以录制数据包，rosbag回放数据的形式进行测试的过程中，cartographer出现了极大的延迟，rosbag play约30min，而在rosbag play结束后，建图仍然需要大约1h。
+
+
+
+
+
 ## 2、原理及效果分析
+
+### 原理分析
 
 cartographer是Google的实时室内建图项目，传感器安装在背包上面，可以生成分辨率为5cm的2D格网地图。
 
 获得的每一帧laser scan数据，利用scan match在最佳估计位置处插入子图（submap）中，且scan matching只跟当前submap有关。在生成一个submap后，会进行一次局部的回环（loop close），利用分支定位和预先计算的网格，所有submap完成后，会进行全局的回环。
 
-### 2D slam
+#### 2D slam
 
 submap的构造是一个重复迭代配准scan和submap的过程。利用配准估算出pose对scan进行刚体变换，插入到submap中。
 
@@ -803,7 +815,7 @@ submap的构造是一个重复迭代配准scan和submap的过程。利用配准�
 
 在scan matching的时候把求pose的问题转换为一个求解非线性最小二乘问题，利用Ceres解决这个问题。因为最小二乘问题是一个局部最优问题，故一个好的初值（pose初值）对求解有很大影响。因此IMU能被用来提供pose初值的旋转变量。在缺乏IMU的时候，可以用提高scan match频率或匹配精度。
 
-### 回环检测
+#### 回环检测
 
 利用SPA方法优化scan和submap的pose。存储插入scan位置处对应的pose用来做回环检测。此外，当submap不在变化时，对应pose的scan和submap也被用来做回环。scan match中找到的good match其对应的pose将被用来做优化问题。
 
@@ -814,3 +826,123 @@ submap的构造是一个重复迭代配准scan和submap的过程。利用配准�
 公式中分别为submap的pose，scan的pose，对应submap和scan的pose的相关性，及相关协方差矩阵。
 
 在执行全局优化时，Ceres尝试改善IMU和测距传感器之间的姿势。选择良好的采集具有大量的闭环约束（例如，如果您的机器人沿直线然后返回）可以提高这些校正的质量并成为姿势校正的可靠来源。然后，您可以使用制图师作为校准过程的一部分，以提高机器人外部校准的质量。
+
+### 效果分析
+
+#### 硬件分析
+
+cartographer的目标是在廉价的传感器设备上也能取得相对较好的建图效果，这里性能明显不符合我们的预期。
+
+　1、首先检查硬件配置（i7-4500U（1.8GHz，双核四线程），8G RAM），满足cartographer的硬件需求（官方文档所述16G RAM在上述测试中限制不大，通过top命令可知上述测试的RAM使用最大30%左右）；
+
+　2、对比cartographer论文（Real-Time Loop Closure in 2D LIDAR SLAM）中的硬件配置（Intel Xeon E5-1650（3.2GHz，六核十二线程））；
+
+　3、解决方法分为两种：
+
+　　　　1）分离法：将cartographer运行在高性能机器上，运动终端将传感器信息通过无线网络上传，从技术上来说，ROS作为分布式控制系统可以轻松实现这种功能分离，但是存在两个问题：稳定的无线网络和成本；
+
+　　　　2）妥协法：通过调整参数，降低建图质量和鲁棒性，提高实时性，适合计算资源不足的小型工控机以及中小范围建图应用；
+
+##### 参数调整
+
+　　cartographer的配置文件在/usr/local/share/cartographer/configuration_files/目录下
+
+　　参数调整主要参考cartographer_ros官方文档中的Low Latency，以下参数调整根据上述测试过程中使用的硬件配置进行
+
+　　1、MAP_BUILDER.num_background_threads=2（=核数（双核四线程=2））；
+
+　　2、POSE_GRAPH.constraint_builder.sampling_ratio=0.10，对应于约束的数量上限；
+
+　　3、POSE_GRAPH.min_score=0.60，成为约束的最低分数，这个值越大，计算速度相对越快，约束数量相对越少，在sampling_ratio较小的情况下，很可能会造成约束过少而导致建图失败，这个值越小，则效果相反，因此这个值可能需要多次调整；
+
+　　4、POSE_GRAPH.constraint_builder.fast_correlative_scan_matcher.linear_search_window=5.
+
+　POSE_GRAPH.constraint_builder.fast_correlative_scan_matcher.angular_search_window=math.rad(20.)，对应于闭环检测（约束检测）时的搜索范围；
+
+​	上述各参数调整核心是闭环检测（约束检测），闭环检测是图优化过程中最为重要的部分，也是最为耗时的部分，因此减少约束总数和搜索范围可以有效提高实时性。
+
+ 
+
+cartographer_ros
+
+　　cartographer_ros配置文件在cartographer_ros/configuration_files/目录下，cartographer_ros实际应用时需要进行一些参数调整以适配实际情况，以2D建图为例，其配置文件为backpack_2d.lua
+
+　　1、一个惯导，发布惯导数据/imu (Imu)，惯导坐标系为base_link；
+
+　　2、一个普通2D激光雷达，发布雷达数据/scan (LaserScan)，tf: base_link->base_laser，
+
+　　　　修改options.num_laser_scans=1，options.num_multi_echo_laser_scans=0；
+
+　　3、roslaunch cartographer_ros demo_backpack_2d.launch；
+
+　　如果需要使用odom
+
+　　4、一个轮速计，发布/odom (Odometry)，tf: odom->base_link，
+
+　　　　修改options.published_frame=”odom”，options.use_odometry=true；
+
+　　如果没有惯导或不相信其他传感器，而只使用激光雷达数据：
+
+　　5、修改cartographer配置文件：
+
+　　　　TRAJECTORY_BUILDER_2D.use_online_correlative_scan_matching=true；
+
+调整参数之后，同样的bag包，我们的建图效果缩短到40-50分钟，这是一个相对来说比较巨大的提升。
+
+
+
+#### 真实场景展望
+
+在室外场景中，特征稀疏，由于真实传感器以及机器人传动本身的误差，会造成机器人移动建图效果出现一定程度的偏差。在机器人速度过快的时候漂移现象会相对比较明显，目前没有真实传感器及机器人测试，下图是网上真实场景的建图效果，机器人基本绘制除了经过的路径的全局地图，但在局部区域，比如路口等位置，有重叠现象，道路边界也不十分齐整。
+
+![img](https://timgsa.baidu.com/timg?image&quality=80&size=b9999_10000&sec=1561026635525&di=def01f7b8ddc2f5016c0a96d0a526b05&imgtype=0&src=http%3A%2F%2Fanswers.ros.org%2Fupfiles%2F15015605336484455.png)
+
+
+
+
+
+## 3、个人总结
+
+在本次工程实践的论文中，我主要完成了算法的仿真环境建立，机器人建模，以及算法的测试效果分析。
+
+## 4、参考文献
+
+[1] P. Besl和N. McKay，“三维形状配准方法”，IEEETTraactions on Pattern Analysis and Machine Intelligence，vol。 14，没有。 2，pp.239-256,1992。
+
+[2] S. Thrun，M。Diel和D. ahnel，“用直升机平台扫描对准和三维表面建模”，2003年。[在线]。可用：citeseer.ist.psu.edu/thrun03scan.html
+
+[3] M. C. Bosse，“ATLAS：大规模自动化绘图和定位的框架”，博士。学位论文，麻省理工学院，剑桥，马萨诸塞州，美国，2004年2月。
+
+[4] E. Olson，“鲁棒而高效的机器人绘图”，博士。论文，麻省理工学院，剑桥，马萨诸塞州，美国，2008年6月。
+
+[5] A. Censi, “An icp variant using a point-to-line metric,” inProceedings of the IEEE International Conference on Robotics and Automation (ICRA),2008.
+
+[6] B. K. P. Horn, “Closed-form solution of absolute orientation using unit quaternions,”Journal of the Optical Society of America. A, vol. 4, no. 4,pp. 629–642, Apr 1987.
+
+[7] F. Lu and E. Milios, “Robot pose estimation in unknown environments by matching 2d range scans,” inProceedings of the IEEE Computer Society Conference on Computer Vision andPattern Recognition (CVPR), 1994, pp. 935–938. [Online]. Available:citeseer.ist.psu.edu/lu94robot.html
+
+[8] W. Press, S. Teukolsky, W. Vetterling, and B. Flannery,NumericalRecipes in C, 2nd ed. Cambridge, UK: Cambridge University Press,1992.
+
+[9] M. A. Fischer and R. C. Bolles, “A paradigm for model-fitting with applications to image analysis and automated cartography,” 1981.
+
+[10] I. J. Cox, “Blanche- An experiment in guidance and navigation of an au-tonomous robot vehicle,”Robotics and Automation, IEEE Transactionson, vol. 7, no. 2, pp. 193–204, 1991.
+
+[11] A. Diosi and L. Kleeman, “Fast laser scan matching using polarco ordinates,”International Journal of Robotics Research, vol. 26, no. 10,pp. 1125–1153, 2007.
+
+[12] A. Censi, L. Iocchi, and G. Grisetti, “Scan matching in the houghdomain,” inProceedings of the IEEE International Conference onRobotics and Automation (ICRA), 2005.
+
+[13] T. Rfer, “Using histogram correlation to create consistent laser scanmaps,” inProceedings of the IEEE International Conference on Roboticsand Automation (ICRA), 2002, pp. 625–630.
+
+[14] M. Bosse and J. Roberts, “Histogram matching and global initializationfor laser-only slam in large unstructured environments,” inICRA, 2007,pp. 4820–4826.
+
+[15] K. Konolige and K. Chou, “Markov localization using correlation,” inIJCAI ’99: Proceedings of the Sixteenth International Joint Conferenceon Artificial Intelligence. San Francisco, CA, USA: Morgan KaufmannPublishers Inc., 1999, pp. 1154–1159.
+
+[16] J. Lengyel, M. Reichert, B. R. Donald, and D. P. Greenberg, “Real-timerobot motion planning using rasterizing computer graphics hardware,”inIn Proc. SIGGRAPH, 1990, pp. 327–335.
+
+[17] S. Thrun, “Robotic mapping: A survey,” inExploring Artificial Intelli-gence in the New Millenium, G. Lakemeyer and B. Nebel, Eds. MorganKaufmann, 2002, to appear.
+
+[18] S. Thrun, W. Burgard, and D. Fox, “A real-time algorithm for mobilerobot mapping with applications to multi-robot and 3D mapping,” inProceedings of the IEEE International Conference on Robotics andAutomation (ICRA). San Francisco, CA: IEEE, 2000.
+
+[19] M. Montemerlo, N. Roy, and S. Thrun, “Perspectives on standardiza-tion in mobile robot programming: The Carnegie Mellon navigation(CARMEN) toolkit,” inProceedings of the IEEE/RSJ InternationalConference on Intelligent Robots and Systems (IROS), vol. 3, Las Vegas,NV, October 2003, pp. 2436–2441.
+
+[20] A. Howard and N. Roy, “The robotics data set repository (radish),”2003. [Online]. Available: <http://radish.sourceforge.net/>
