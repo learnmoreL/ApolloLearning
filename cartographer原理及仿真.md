@@ -39,100 +39,10 @@ config:用于保存rviz相关文件
 
 ###### 创建URDF相关模型
 
- 我们设计的机器人的底盘模型有7个link和6个joint。7个link包括1个机器人底板，2个电机，2个驱动轮和2个万向轮；6个joint负责将驱动轮、万向轮、电机安装到底板上，并设置相应的连接方式。以下是模型文件的具体内容。
+ 我们设计的机器人的底盘模型有7个link和6个joint。7个link包括1个机器人底板，2个电机，2个驱动轮和2个万向轮；6个joint负责将驱动轮、万向轮、电机安装到底板上，并设置相应的连接方式。以下是模型文件的局部内容。
 
-```xml
-<?xml version="1.0" ?>
-<robot name="mbot">
-    <link name="base_link">
-        <visual>
-            <origin xyz="0 0 0" rpy="0 0 0"/>
-            <geometry>
-                <cylinder length="0.16" radius="0.20"/>
-            </geometry>
-            <material name="yellow">
-                <color rgba="1 0.4 0 1"/>
-            </material>
-        </visual>
-    </link>
-    <joint name="left_wheel_joint" type="continuous">
-        <origin xyz="0 0.19 -0.05" rpy="0 0 0"/>
-        <parent link="base_link"/>
-        <child link="left_wheel_link"/>
-        <axis xyz="0 1 0"/>
-    </joint>
+![1561017482082](/home/catalina/.config/Typora/typora-user-images/1561017482082.png)
 
-    <link name="left_wheel_link">
-        <visual>
-            <origin xyz="0 0 0" rpy="1.5707 0 0" />
-            <geometry>
-                <cylinder radius="0.06" length = "0.025"/>
-            </geometry>
-            <material name="white">
-                <color rgba="1 1 1 0.9"/>
-            </material>
-        </visual>
-    </link>
-
-    <joint name="right_wheel_joint" type="continuous">
-        <origin xyz="0 -0.19 -0.05" rpy="0 0 0"/>
-        <parent link="base_link"/>
-        <child link="right_wheel_link"/>
-        <axis xyz="0 1 0"/>
-    </joint>
-
-    <link name="right_wheel_link">
-        <visual>
-            <origin xyz="0 0 0" rpy="1.5707 0 0" />
-            <geometry>
-                <cylinder radius="0.06" length = "0.025"/>
-            </geometry>
-            <material name="white">
-                <color rgba="1 1 1 0.9"/>
-            </material>
-        </visual>
-    </link>
-
-    <joint name="front_caster_joint" type="continuous">
-        <origin xyz="0.18 0 -0.095" rpy="0 0 0"/>
-        <parent link="base_link"/>
-        <child link="front_caster_link"/>
-        <axis xyz="0 1 0"/>
-    </joint>
-
-    <link name="front_caster_link">
-        <visual>
-            <origin xyz="0 0 0" rpy="0 0 0"/>
-            <geometry>
-                <sphere radius="0.015" />
-            </geometry>
-            <material name="black">
-                <color rgba="0 0 0 0.95"/>
-            </material>
-        </visual>
-    </link>
-
-    <joint name="back_caster_joint" type="continuous">
-        <origin xyz="-0.18 0 -0.095" rpy="0 0 0"/>
-        <parent link="base_link"/>
-        <child link="back_caster_link"/>
-        <axis xyz="0 1 0"/>
-    </joint>
-
-    <link name="back_caster_link">
-        <visual>
-            <origin xyz="0 0 0" rpy="0 0 0"/>
-            <geometry>
-                <sphere radius="0.015" />
-            </geometry>
-            <material name="black">
-                <color rgba="0 0 0 0.95"/>
-            </material>
-        </visual>
-    </link>
-
-</robot>
-```
 ###### 解析urdf模型
 
 针对上面创建的urdf模型，需要对其关键部分进行解析。
@@ -145,22 +55,9 @@ config:用于保存rviz相关文件
 
 launch文件的作用是:同时启动多个节点,使用roslaunch命令运行.launch文件中指定的节点。在launch文件夹中创建文件display.launch，并编辑，代码如下：
 
-```xml
-<launch>
-	<param name="robot_description" textfile="$(find mbot_description)/urdf/urdf/mbot_base.urdf" />
-<!-- 设置GUI参数，显示关节控制插件 -->
-<param name="use_gui" value="true"/>
+![1561017513204](/home/catalina/.config/Typora/typora-user-images/1561017513204.png)
 
-<!-- 运行joint_state_publisher节点，发布机器人的关节状态  -->
-<node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" />
-
-<!-- 运行robot_state_publisher节点，发布tf  -->
-<node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher" />
-<!-- 运行rviz可视化界面 -->
-<node name="rviz" pkg="rviz" type="rviz" args="-d $(find mbot_description)/config/mbot_urdf.rviz" required="true" />
-</launch>
-```
-启动launch文件我们的机器人底盘模型效果如图
+动launch文件我们的机器人底盘模型效果如图
 
 ![](cartographer原理及仿真.assets/微信截图_20190618162731.png)
 
@@ -222,9 +119,7 @@ xacro文件可以使用宏定义来声明重复使用的代码模块，而且可
 <robot name="arm" xmlns:xacro="http://www.ros.org/wiki/xacro">
 
     <xacro:include filename="$(find mbot_description)/urdf/xacro/mbot_base.xacro" />
-
     <mbot_base/>
-
 </robot>
 ```
 
@@ -248,51 +143,11 @@ xacro文件可以使用宏定义来声明重复使用的代码模块，而且可
 
 ​	首先尝试创建一个摄像头模型，依照真实摄像探头，我们画了一个长方形，以此代表摄像头模型，对应的模型文件是camera.xacro，如下
 
-```xml
-<?xml version="1.0"?>
-<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="camera">
-
-    <xacro:macro name="usb_camera" params="prefix:=camera">
-        <link name="${prefix}_link">
-            <visual>
-                <origin xyz=" 0 0 0 " rpy="0 0 0" />
-                <geometry>
-                    <box size="0.01 0.04 0.04" />
-                </geometry>
-                <material name="black"/>
-            </visual>
-        </link>
-    </xacro:macro>
-
-</robot>
-```
+![1561017598066](/home/catalina/.config/Typora/typora-user-images/1561017598066.png)
 
 以上代码使用一个名为usb_camera的宏来描述摄像头，输入参数是摄像头的名称，宏中包含了摄像头长方体link的参数。然后还需要创建一个顶层xacro文件，把机器人和摄像头模块拼装在一起，顶层xacro文件的内容如下。
 
-```xml
-<?xml version="1.0"?>
-<robot name="arm" xmlns:xacro="http://www.ros.org/wiki/xacro">
-
-    <xacro:include filename="$(find mbot_description)/urdf/xacro/mbot_base.xacro" />
-    <xacro:include filename="$(find mbot_description)/urdf/xacro/sensors/camera.xacro" />
-
-    <xacro:property name="camera_offset_x" value="0.17" />
-    <xacro:property name="camera_offset_y" value="0" />
-    <xacro:property name="camera_offset_z" value="0.10" />
-
-    <mbot_base/>
-
-    <!-- Camera -->
-    <joint name="camera_joint" type="fixed">
-        <origin xyz="${camera_offset_x} ${camera_offset_y} ${camera_offset_z}" rpy="0 0 0" />
-        <parent link="base_link"/>
-        <child link="camera_link"/>
-    </joint>
-
-    <xacro:usb_camera prefix="camera"/>
-
-</robot>
-```
+![1561017646359](/home/catalina/.config/Typora/typora-user-images/1561017646359.png)
 
 在rviz中可查看机器人模型
 
@@ -300,24 +155,7 @@ xacro文件可以使用宏定义来声明重复使用的代码模块，而且可
 
 使用类似的方式可以为机器人添加一个激光雷达模型,这里配置raplidar.xacro。
 
-```xml
-<?xml version="1.0"?>
-<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="laser">
-
-	<xacro:macro name="rplidar" params="prefix:=laser">
-		<link name="${prefix}_link">
-			<visual>
-				<origin xyz=" 0 0 0 " rpy="0 0 0" />
-				<geometry>
-					<cylinder length="0.05" radius="0.05"/>
-				</geometry>
-				<material name="black"/>
-			</visual>
-		</link>
-	</xacro:macro>
-
-</robot>
-```
+![1561017673459](/home/catalina/.config/Typora/typora-user-images/1561017673459.png)
 
 未来实现机器人仿真，需要想办法控制机器人在虚拟环境中的运动，另外如果仿真中的传感器可以像真实设备一样获取环境中的信息就更好了。
 
@@ -362,44 +200,7 @@ Gazebo插件可以根据插件的作用范围应用到URDF模型的<robot>、<li
 
 在launch文件中加载机器人模型，运行gazeb，加载机器人模型，并且启动一些必要节点。
 
-```xml
-<launch>
-
-    <!-- 设置launch文件的参数 -->
-    <arg name="world_name" value="$(find mbot_gazebo)/worlds/cloister.world"/>
-    <arg name="paused" default="false"/>
-    <arg name="use_sim_time" default="true"/>
-    <arg name="gui" default="true"/>
-    <arg name="headless" default="false"/>
-    <arg name="debug" default="false"/>
-
-    <!-- 运行gazebo仿真环境 -->
-    <include file="$(find gazebo_ros)/launch/empty_world.launch">
-        <arg name="world_name" value="$(arg world_name)" />
-        <arg name="debug" value="$(arg debug)" />
-        <arg name="gui" value="$(arg gui)" />
-        <arg name="paused" value="$(arg paused)"/>
-        <arg name="use_sim_time" value="$(arg use_sim_time)"/>
-        <arg name="headless" value="$(arg headless)"/>
-    </include>
-
-    <!-- 加载机器人模型描述参数 -->
-    <param name="robot_description" command="$(find xacro)/xacro --inorder '$(find mbot_description)/urdf/xacro/gazebo/mbot_with_laser_gazebo.xacro'" /> 
-
-    <!-- 运行joint_state_publisher节点，发布机器人的关节状态  -->
-    <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" ></node> 
-
-    <!-- 运行robot_state_publisher节点，发布tf  -->
-    <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher"  output="screen" >
-        <param name="publish_frequency" type="double" value="50.0" />
-    </node>
-
-    <!-- 在gazebo中加载机器人模型-->
-    <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model" respawn="false" output="screen"
-          args="-urdf -model mbot -param robot_description"/> 
-
-</launch>
-```
+![1561017710725](/home/catalina/.config/Typora/typora-user-images/1561017710725.png)
 
 以上launch文件主要做的两项工作
 
@@ -424,75 +225,7 @@ Gazebo插件可以根据插件的作用范围应用到URDF模型的<robot>、<li
 
 我们使用的激光雷达是raplidar，在rplidar模型文件中添加<gazebo>标签
 
-```xml
-<?xml version="1.0"?>
-<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="laser">
-
-    <xacro:macro name="rplidar" params="prefix:=laser">
-        <!-- Create laser reference frame -->
-        <link name="${prefix}_link">
-            <inertial>
-                <mass value="0.1" />
-                <origin xyz="0 0 0" />
-                <inertia ixx="0.01" ixy="0.0" ixz="0.0"
-                         iyy="0.01" iyz="0.0"
-                         izz="0.01" />
-            </inertial>
-
-            <visual>
-                <origin xyz=" 0 0 0 " rpy="0 0 0" />
-                <geometry>
-                    <cylinder length="0.05" radius="0.05"/>
-                </geometry>
-                <material name="black"/>
-            </visual>
-
-            <collision>
-                <origin xyz="0.0 0.0 0.0" rpy="0 0 0" />
-                <geometry>
-                    <cylinder length="0.06" radius="0.05"/>
-                </geometry>
-            </collision>
-        </link>
-        <gazebo reference="${prefix}_link">
-            <material>Gazebo/Black</material>
-        </gazebo>
-
-        <gazebo reference="${prefix}_link">
-            <sensor type="ray" name="rplidar">
-                <pose>0 0 0 0 0 0</pose>
-                <visualize>false</visualize>
-                <update_rate>5.5</update_rate>
-                <ray>
-                    <scan>
-                      <horizontal>
-                        <samples>360</samples>
-                        <resolution>1</resolution>
-                        <min_angle>-3</min_angle>
-                        <max_angle>3</max_angle>
-                      </horizontal>
-                    </scan>
-                    <range>
-                      <min>0.10</min>
-                      <max>6.0</max>
-                      <resolution>0.01</resolution>
-                    </range>
-                    <noise>
-                      <type>gaussian</type>
-                      <mean>0.0</mean>
-                      <stddev>0.01</stddev>
-                    </noise>
-                </ray>
-                <plugin name="gazebo_rplidar" filename="libgazebo_ros_laser.so">
-                    <topicName>/scan</topicName>
-                    <frameName>laser_link</frameName>
-                </plugin>
-            </sensor>
-        </gazebo>
-
-    </xacro:macro>
-</robot>
-```
+![1561017813496](/home/catalina/.config/Typora/typora-user-images/1561017813496.png)
 
 激光雷达的传感器类型是ray，rplidar的相关参数可以在产品手册中找到。为了获取尽量贴近真实的仿真效果，需要根据实际参数配置<ray>中的雷达参数：360度检测范围、单圈360个采样点，5.5hz采样频率，最远6m检测范围等。最后用<plugs>标签加载激光雷达的libgazebo_ros_laser.so，所发布的激光雷达的话题是“/scan”
 
@@ -574,8 +307,6 @@ geometry_msgs/TwistWithCovariance twist
       float64 y
       float64 z
   float64[36] covariance
-
-
 ```
 
 上述数据结构中，除了数据与位置的关键信息外，还包含用于滤波算法的协方差矩阵。在精度要求不高的机器人系统中可以使用默认的协方差矩阵；而在竞答要求高的系统中，需要先对机器人精确建模，再通过仿真、实验等方法确定该矩阵的具体数值。
